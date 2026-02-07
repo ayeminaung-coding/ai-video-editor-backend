@@ -1,4 +1,6 @@
-// video.ts - Simple in-memory video model
+// video.ts - Video model backed by Postgres (Neon)
+
+import { query } from '../db';
 
 export type VideoStatus = 'completed' | 'processing' | 'failed';
 
@@ -11,45 +13,57 @@ export interface Video {
   updatedAt: string;
 }
 
-// In-memory store for now (later can be replaced with a real database)
-const videos: Video[] = [];
-
-export const getAllVideos = (): Video[] => {
-  return videos.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+export const getAllVideos = async (): Promise<Video[]> => {
+  const rows = await query<Video>(
+    `SELECT id, filename, size, status, created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM videos
+     ORDER BY created_at DESC`,
+  );
+  return rows;
 };
 
-export const findVideoById = (id: string): Video | undefined => {
-  return videos.find(v => v.id === id);
+export const findVideoById = async (id: string): Promise<Video | undefined> => {
+  const rows = await query<Video>(
+    `SELECT id, filename, size, status, created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM videos
+     WHERE id = $1`,
+    [id],
+  );
+  return rows[0];
 };
 
-export const createVideo = (data: { filename: string; size: number }): Video => {
-  const now = new Date().toISOString();
-  const video: Video = {
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
-    filename: data.filename,
-    size: data.size,
-    status: 'processing',
-    createdAt: now,
-    updatedAt: now,
-  };
-  videos.unshift(video);
-  return video;
+export const createVideo = async (data: {
+  filename: string;
+  size: number;
+}): Promise<Video> => {
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const rows = await query<Video>(
+    `INSERT INTO videos (id, filename, size, status)
+     VALUES ($1, $2, $3, 'processing')
+     RETURNING id, filename, size, status, created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [id, data.filename, data.size],
+  );
+  return rows[0];
 };
 
-export const updateVideoStatus = (
+export const updateVideoStatus = async (
   id: string,
   status: VideoStatus,
-): Video | undefined => {
-  const video = findVideoById(id);
-  if (!video) return undefined;
-  video.status = status;
-  video.updatedAt = new Date().toISOString();
-  return video;
+): Promise<Video | undefined> => {
+  const rows = await query<Video>(
+    `UPDATE videos
+     SET status = $2, updated_at = NOW()
+     WHERE id = $1
+     RETURNING id, filename, size, status, created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [id, status],
+  );
+  return rows[0];
 };
 
-export const deleteVideo = (id: string): boolean => {
-  const idx = videos.findIndex(v => v.id === id);
-  if (idx === -1) return false;
-  videos.splice(idx, 1);
-  return true;
+export const deleteVideo = async (id: string): Promise<boolean> => {
+  const rows = await query<{ id: string }>(
+    `DELETE FROM videos WHERE id = $1 RETURNING id`,
+    [id],
+  );
+  return rows.length > 0;
 };

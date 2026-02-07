@@ -11,8 +11,13 @@ const router = Router();
 
 // GET /api/videos - list videos
 router.get('/', async (_req, res) => {
-  const videos = getAllVideos();
-  res.json(videos);
+  try {
+    const videos = await getAllVideos();
+    res.json(videos);
+  } catch (err) {
+    console.error('Error fetching videos', err);
+    res.status(500).json({ error: 'Failed to fetch videos' });
+  }
 });
 
 // POST /api/videos/upload - receive upload metadata
@@ -23,12 +28,17 @@ router.post('/upload', async (req, res) => {
     return res.status(400).json({ error: 'filename is required' });
   }
 
-  const video = createVideo({
-    filename,
-    size: typeof size === 'number' ? size : 0,
-  });
+  try {
+    const video = await createVideo({
+      filename,
+      size: typeof size === 'number' ? size : 0,
+    });
 
-  res.status(201).json(video);
+    res.status(201).json(video);
+  } catch (err) {
+    console.error('Error creating video', err);
+    res.status(500).json({ error: 'Failed to create video' });
+  }
 });
 
 // POST /api/videos/:id/edit - start AI editing job (stub)
@@ -36,13 +46,13 @@ router.post('/:id/edit', async (req, res) => {
   const { id } = req.params;
   const settings = req.body;
 
-  const video = findVideoById(id);
+  const video = await findVideoById(id);
   if (!video) {
     return res.status(404).json({ error: 'Video not found' });
   }
 
   // For now, mark as processing and echo back settings
-  updateVideoStatus(id, 'processing');
+  await updateVideoStatus(id, 'processing');
 
   res.json({
     id,
@@ -61,7 +71,7 @@ router.patch('/:id/status', async (req, res) => {
     return res.status(400).json({ error: 'status is required' });
   }
 
-  const updated = updateVideoStatus(id, status);
+  const updated = await updateVideoStatus(id, status);
   if (!updated) {
     return res.status(404).json({ error: 'Video not found' });
   }
@@ -73,7 +83,7 @@ router.patch('/:id/status', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
-  const video = findVideoById(id);
+  const video = await findVideoById(id);
   if (!video) {
     return res.status(404).json({ error: 'Video not found' });
   }
@@ -85,7 +95,7 @@ router.get('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
 
-  const ok = deleteVideo(id);
+  const ok = await deleteVideo(id);
   if (!ok) {
     return res.status(404).json({ error: 'Video not found' });
   }
