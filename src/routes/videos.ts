@@ -1,16 +1,21 @@
 import { Router } from 'express';
+import {
+  createVideo,
+  deleteVideo,
+  findVideoById,
+  getAllVideos,
+  updateVideoStatus,
+} from '../models/video';
 
 const router = Router();
 
-// GET /api/videos - list videos (stub)
+// GET /api/videos - list videos
 router.get('/', async (_req, res) => {
-  const demoVideos = [
-    { id: '1', title: 'Demo video', status: 'completed', createdAt: new Date().toISOString() },
-  ];
-  res.json(demoVideos);
+  const videos = getAllVideos();
+  res.json(videos);
 });
 
-// POST /api/videos/upload - receive upload metadata (stub)
+// POST /api/videos/upload - receive upload metadata
 router.post('/upload', async (req, res) => {
   const { filename, size } = req.body;
 
@@ -18,21 +23,26 @@ router.post('/upload', async (req, res) => {
     return res.status(400).json({ error: 'filename is required' });
   }
 
-  const video = {
-    id: Date.now().toString(),
+  const video = createVideo({
     filename,
-    size: size ?? 0,
-    status: 'processing' as const,
-    createdAt: new Date().toISOString(),
-  };
+    size: typeof size === 'number' ? size : 0,
+  });
 
-  res.status(201).json({ video });
+  res.status(201).json(video);
 });
 
 // POST /api/videos/:id/edit - start AI editing job (stub)
 router.post('/:id/edit', async (req, res) => {
   const { id } = req.params;
   const settings = req.body;
+
+  const video = findVideoById(id);
+  if (!video) {
+    return res.status(404).json({ error: 'Video not found' });
+  }
+
+  // For now, mark as processing and echo back settings
+  updateVideoStatus(id, 'processing');
 
   res.json({
     id,
@@ -42,16 +52,45 @@ router.post('/:id/edit', async (req, res) => {
   });
 });
 
-// GET /api/videos/:id - get single video info (stub)
+// PATCH /api/videos/:id/status - manually update status (e.g., mark as completed)
+router.patch('/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body as { status: 'completed' | 'processing' | 'failed' };
+
+  if (!status) {
+    return res.status(400).json({ error: 'status is required' });
+  }
+
+  const updated = updateVideoStatus(id, status);
+  if (!updated) {
+    return res.status(404).json({ error: 'Video not found' });
+  }
+
+  res.json(updated);
+});
+
+// GET /api/videos/:id - get single video info
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
-  res.json({
-    id,
-    filename: 'demo.mp4',
-    status: 'completed',
-    createdAt: new Date().toISOString(),
-  });
+  const video = findVideoById(id);
+  if (!video) {
+    return res.status(404).json({ error: 'Video not found' });
+  }
+
+  res.json(video);
+});
+
+// DELETE /api/videos/:id - delete a video
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const ok = deleteVideo(id);
+  if (!ok) {
+    return res.status(404).json({ error: 'Video not found' });
+  }
+
+  res.status(204).send();
 });
 
 export default router;
